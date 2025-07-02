@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RLT-Rechner (Praxis-Version)</title>
+    <title>RLT-Rechner (Analyse-Version)</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <div class="container">
     <header>
-        <h1>🌬️ RLT-Rechner (Praxis-Version)</h1>
+        <h1>🌬️ RLT-Rechner (Analyse-Version)</h1>
         <p class="subtitle">Analyse von Anlagenprozessen und Luftzuständen</p>
     </header>
 
@@ -21,12 +21,11 @@
                 <button id="resetBtn" title="Alle Werte auf Standard zurücksetzen">⟲ Reset</button>
             </div>
             <div class="main-config-section">
-                <div class="switch-container">
-                    <label for="kuehlerAktiv" class="switch-label">Kühler / Entfeuchter</label>
-                    <label class="switch">
-                        <input type="checkbox" id="kuehlerAktiv" checked>
-                        <span class="slider round"></span>
-                    </label>
+                <h4>Betriebsmodus</h4>
+                <div class="radio-group">
+                    <label><input type="radio" name="betriebsmodus" value="heizen">Nur Heizen</label>
+                    <label><input type="radio" name="betriebsmodus" value="kuehlen_sensibel">Kühlen (sensibel)</label>
+                    <label><input type="radio" name="betriebsmodus" value="entfeuchten" checked>Kühlen & Entfeuchten</label>
                 </div>
             </div>
             <hr>
@@ -67,6 +66,23 @@
                     </div>
                 </div>
             </div>
+            <hr>
+            <div class="grid-container water-temp-grid">
+                 <div class="input-group-inline">
+                    <label>Heizwasser T (°C V/R)</label>
+                    <div>
+                        <input type="number" id="tempHeizVorlauf" value="70" step="1">
+                        <input type="number" id="tempHeizRuecklauf" value="50" step="1">
+                    </div>
+                </div>
+                <div class="input-group-inline" id="kuehlwasserWrapper">
+                    <label>Kühlwasser T (°C V/R)</label>
+                    <div>
+                        <input type="number" id="tempKuehlVorlauf" value="8" step="1">
+                        <input type="number" id="tempKuehlRuecklauf" value="13" step="1">
+                    </div>
+                </div>
+            </div>
         </div>
         
         <div class="card" id="results-card">
@@ -78,17 +94,17 @@
                 </div>
                 <div class="arrow">→</div>
                 <div class="process-column">
-                    <div class="component-node" id="comp-ve"><h5>Vorerhitzer</h5><p>P: <span id="res-p-ve">0,00</span> kW</p></div>
+                    <div class="component-node" id="comp-ve"><h5>Vorerhitzer</h5><p>P: <span id="res-p-ve">0,00</span> kW</p><p>💧 <span id="res-wv-ve">0,00</span> m³/h</p></div>
                     <div class="state-node" id="node-1"><p>T: <span id="res-t-1">--</span>°C</p><p>rH: <span id="res-rh-1">--</span>%</p><p>x: <span id="res-x-1">--</span>g/kg</p></div>
                 </div>
                 <div class="arrow">→</div>
                 <div class="process-column">
-                    <div class="component-node" id="comp-k"><h5>Kühler</h5><p>P: <span id="res-p-k">0,00</span> kW</p></div>
+                    <div class="component-node" id="comp-k"><h5>Kühler</h5><p>P: <span id="res-p-k">0,00</span> kW</p><p>💧 <span id="res-wv-k">0,00</span> m³/h</p><p>💧❄️ <span id="res-kondensat">0,00</span> kg/h</p></div>
                     <div class="state-node" id="node-2"><p>T: <span id="res-t-2">--</span>°C</p><p>rH: <span id="res-rh-2">--</span>%</p><p>x: <span id="res-x-2">--</span>g/kg</p></div>
                 </div>
                 <div class="arrow">→</div>
                 <div class="process-column">
-                    <div class="component-node" id="comp-ne"><h5>Nacherhitzer</h5><p>P: <span id="res-p-ne">0,00</span> kW</p></div>
+                    <div class="component-node" id="comp-ne"><h5>Nacherhitzer</h5><p>P: <span id="res-p-ne">0,00</span> kW</p><p>💧 <span id="res-wv-ne">0,00</span> m³/h</p></div>
                     <div class="state-node" id="node-3"><p>T: <span id="res-t-3">--</span>°C</p><p>rH: <span id="res-rh-3">--</span>%</p><p>x: <span id="res-x-3">--</span>g/kg</p></div>
                 </div>
                  <div class="arrow equals">→</div>
@@ -139,7 +155,7 @@
              <p class="info-text">Die Umrechnung von g/kg nach g/m³ erfolgt mit einer angenommenen Luftdichte von 1,2 kg/m³.</p>
         </div>
     </main>
-    <footer class="footer"><p>RLT-Rechner (Praxis-Version) | Erstellt mit Gemini</p></footer>
+    <footer class="footer"><p>RLT-Rechner (Analyse-Version) | Erstellt mit Gemini</p></footer>
 </div>
 <script src="script.js"></script>
 </body>
