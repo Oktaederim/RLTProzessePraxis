@@ -49,6 +49,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function calculateAll() {
         try {
+            // *** GEÄNDERT: Variable für Warnmeldung hinzugefügt ***
+            let warningMessage = ''; 
             const modus = document.querySelector('input[name="betriebsmodus"]:checked').value;
             const inputs = {
                 tempAussen: parseFloat(dom.tempAussen.value) || 0, rhAussen: parseFloat(dom.rhAussen.value) || 0,
@@ -66,6 +68,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const zuluftSoll = { t: inputs.tempZuluft };
             zuluftSoll.x = (modus === 'entfeuchten') ? getX(zuluftSoll.t, inputs.rhZuluft, inputs.druck) : aussen.x;
+
+            // *** HINZUGEFÜGT: Plausibilitätsprüfung ***
+            if (modus === 'entfeuchten') {
+                const zielTaupunkt = getTd(zuluftSoll.x, inputs.druck);
+                // Annahme: Kühlwasser muss ca. 2K kälter sein als der Zielsollwert
+                if (zielTaupunkt < inputs.tempKuehlVorlauf + 2.0) {
+                    warningMessage = `Hinweis: Kühlwasser-Temperatur (${formatGerman(inputs.tempKuehlVorlauf, 1)}°C) zu hoch, um Taupunkt von ${formatGerman(zielTaupunkt, 1)}°C zu erreichen. Entfeuchtung nicht möglich.`;
+                }
+            }
             
             const massenstrom_kg_s = (inputs.volumenstrom / 3600) * RHO_LUFT;
             let states = [aussen, { ...aussen }, { ...aussen }, { ...aussen }];
@@ -116,17 +127,24 @@ document.addEventListener('DOMContentLoaded', () => {
             const finalState = { ...states[3], rh: getRh(states[3].t, states[3].x, inputs.druck), x_gm3: states[3].x * RHO_LUFT };
             for(let i=0; i<4; i++) states[i].rh = getRh(states[i].t, states[i].x, inputs.druck);
             
-            renderAll(states, operations, aussen, finalState);
+            // *** GEÄNDERT: Warnmeldung wird an renderAll übergeben ***
+            renderAll(states, operations, aussen, finalState, warningMessage);
         } catch (error) { console.error("Berechnungsfehler:", error); }
     }
     
-    function renderAll(states, operations, aussen, finalState) {
-        const activeSteps = Object.entries(operations).filter(([, op]) => op.p > 0);
-        if (activeSteps.length > 0) {
-            const activeNames = activeSteps.map(([key]) => key.toUpperCase());
-            dom.processOverviewContainer.innerHTML = `<div class="process-overview process-info">Prozesskette: ${activeNames.join(' → ')}</div>`;
+    // *** GEÄNDERT: Funktion akzeptiert nun 'warningMessage' ***
+    function renderAll(states, operations, aussen, finalState, warningMessage) {
+        // *** GEÄNDERT: Logik zur Anzeige der Warnmeldung ***
+        if (warningMessage) {
+            dom.processOverviewContainer.innerHTML = `<div class="process-overview process-error">${warningMessage}</div>`;
         } else {
-            dom.processOverviewContainer.innerHTML = `<div class="process-overview process-success">Idealzustand</div>`;
+            const activeSteps = Object.entries(operations).filter(([, op]) => op.p > 0);
+            if (activeSteps.length > 0) {
+                const activeNames = activeSteps.map(([key]) => key.toUpperCase());
+                dom.processOverviewContainer.innerHTML = `<div class="process-overview process-info">Prozesskette: ${activeNames.join(' → ')}</div>`;
+            } else {
+                dom.processOverviewContainer.innerHTML = `<div class="process-overview process-success">Idealzustand</div>`;
+            }
         }
 
         let colors = ['color-green', '', '', '', ''];
