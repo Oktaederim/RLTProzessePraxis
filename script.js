@@ -30,9 +30,9 @@ document.addEventListener('DOMContentLoaded', () => {
         raumtypen: {
             buero: { personenLast: 100, luftratePerson: 30, luftwechsel: 3, maxPersonenProM2: 0.125 },
             seminar: { personenLast: 120, luftratePerson: 30, luftwechsel: 4, maxPersonenProM2: 1.0 },
-            hoersaal: { personenLast: 120, luftratePerson: 30, luftwechsel: 5, maxPersonenProM2: 1.5 }, // *** NEU ***
+            hoersaal: { personenLast: 120, luftratePerson: 30, luftwechsel: 5, maxPersonenProM2: 1.5 },
             labor: { personenLast: 140, luftratePerson: 30, luftwechsel: 8, luftrateFlaeche: 25, maxPersonenProM2: 0.2 },
-            technik: { personenLast: 0, luftratePerson: 30, luftwechsel: 10, maxPersonenProM2: 0 },
+            technik: { personenLast: 0, luftratePerson: 30, luftwechsel: 10, maxPersonenProM2: 0 }, 
         },
         gebaeude: {
             unsaniert_alt: { u_wand: 1.4, u_fenster: 2.8, u_dach: 0.8 },
@@ -60,9 +60,12 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (raumtyp === 'seminar') {
              dom.personenAnzahl.value = 15;
             dom.geraeteLast.value = 500;
-        } else if (raumtyp === 'hoersaal') { // *** NEU ***
+        } else if (raumtyp === 'hoersaal') {
              dom.personenAnzahl.value = 80;
              dom.geraeteLast.value = 1000;
+             dom.raumLaenge.value = 15;
+             dom.raumBreite.value = 10;
+             dom.raumHoehe.value = 4;
         } else {
             dom.personenAnzahl.value = 4;
             dom.geraeteLast.value = 800;
@@ -103,12 +106,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const waermelast_intern = inputs.personen * raumSettings.personenLast + inputs.geraete + inputs.licht;
         const v_waermelast = waermelast_intern / (p.cp_luft * (p.temperaturen.aussen_sommer - p.temperaturen.innen_sommer));
         
+        // *** GEÄNDERT: Logik zur Bestimmung des maßgeblichen Luftbedarfs ***
         const kandidaten = {
             'Hygiene': v_personen,
             'Mindest-Luftwechsel': v_luftwechsel,
             'Flächenrate': v_flaeche,
-            'Wärmelastabfuhr': (inputs.raumtyp === 'technik' || inputs.raumtyp === 'hoersaal' ? v_waermelast : 0)
+            'Wärmelastabfuhr': (inputs.raumtyp === 'technik' ? v_waermelast : 0)
         };
+        
+        // Für den Hörsaal wird v_waermelast auch berücksichtigt
+        if (inputs.raumtyp === 'hoersaal') {
+            kandidaten['Wärmelastabfuhr'] = v_waermelast;
+        }
         
         let v_final = 0;
         let v_info = 'Kein Bedarf';
@@ -119,22 +128,25 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        if (raumSettings.maxPersonenProM2 > 0 && (inputs.personen / raumflaeche) > raumSettings.maxPersonenProM2) {
-            sicherheitshinweise.push(`⚠️ <strong>Personendichte:</strong> Die angegebene Personenzahl ist sehr hoch. Beachten Sie die Vorgaben der Versammlungsstättenverordnung (VStättV) oder der DGUV.`);
+        // --- GEÄNDERT: Logik zur Generierung der Hinweise ---
+        const personen_pro_m2 = inputs.personen / raumflaeche;
+        if (raumSettings.maxPersonenProM2 > 0 && personen_pro_m2 > raumSettings.maxPersonenProM2) {
+            const empfohlene_pers = Math.floor(raumflaeche * raumSettings.maxPersonenProM2);
+            sicherheitshinweise.push(`⚠️ <strong>Personendichte:</strong> ${personen_pro_m2.toFixed(1)} Pers./m² ist sehr hoch. Für diesen Raumtyp werden ca. ${raumSettings.maxPersonenProM2.toFixed(1)} Pers./m² (max. ${empfohlene_pers} Pers.) empfohlen (vgl. DGUV/VStättV).`);
         }
         
         if (inputs.raumtyp === 'labor') {
             hinweise.push(`💡 <strong>Normbezug Labor:</strong> Der Luftbedarf wird aus dem höchsten Wert von Personenbedarf, <strong>${raumSettings.luftwechsel}-fachem Luftwechsel</strong> oder <strong>${raumSettings.luftrateFlaeche} m³/h pro m²</strong> ermittelt (gem. TRGS 526 / DIN 1946-7).`);
-        } else if (inputs.raumtyp === 'buero' || inputs.raumtyp === 'seminar' || inputs.raumtyp === 'hoersaal') {
+        } else if (['buero', 'seminar', 'hoersaal'].includes(inputs.raumtyp)) {
              hinweise.push(`💡 <strong>Normbezug Büro/Seminar/Hörsaal:</strong> Der Luftbedarf pro Person von <strong>${raumSettings.luftratePerson} m³/h</strong> entspricht den Anforderungen der Arbeitsstättenregel (ASR A3.6).`);
-        } else if (inputs.raumtyp === 'technik') { // *** NEU ***
-             hinweise.push(`💡 <strong>Normbezug Technik/Serverraum:</strong> Die Auslegung erfolgt primär nach der abzuführenden Wärmelast. Ein Mindestluftwechsel von <strong>${raumSettings.luftwechsel} 1/h</strong> wird zur Grundlüftung angenommen (vgl. VDI 2054 / BSI).`);
+        } else if (inputs.raumtyp === 'technik') {
+             hinweise.push(`💡 <strong>Normbezug Technik/Serverraum:</strong> Die Auslegung erfolgt primär nach Wärmelast. Ein Mindestluftwechsel von <strong>${raumSettings.luftwechsel} 1/h</strong> dient zur Grundlüftung (vgl. VDI 2054).`);
         }
         
         const kuehllast_total_w = waermelast_intern + (inputs.fensterFlaeche * p.sonnenlast_fenster);
-        const temp_ohne_kuehlung = p.temperaturen.aussen_sommer + kuehllast_total_w / (v_final * p.cp_luft);
-        if (v_final > 0 && temp_ohne_kuehlung > p.temperaturen.max_asr) {
-            sicherheitshinweise.push(`⚠️ <strong>Temperatur-Check (ASR A3.5):</strong> Ohne Kühlung würde die Raumtemperatur ca. <strong>${temp_ohne_kuehlung.toFixed(1)}°C</strong> erreichen. Maßnahmen zur Temperatursenkung sind erforderlich, da die 26°C-Marke überschritten wird.`);
+        const temp_ohne_kuehlung = v_final > 0 ? p.temperaturen.aussen_sommer + kuehllast_total_w / (v_final * p.cp_luft) : p.temperaturen.aussen_sommer + kuehllast_total_w;
+        if (temp_ohne_kuehlung > p.temperaturen.max_asr) {
+            sicherheitshinweise.push(`⚠️ <strong>Temperatur-Check (ASR A3.5):</strong> Ohne Kühlung würde die Raumtemperatur ca. <strong>${temp_ohne_kuehlung.toFixed(1)}°C</strong> erreichen. Maßnahmen zur Temperatursenkung sind erforderlich.`);
         }
         
         const dt_winter = p.temperaturen.innen_winter - p.temperaturen.aussen_winter;
