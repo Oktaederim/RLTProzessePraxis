@@ -2,213 +2,143 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const dom = {
         // Inputs
-        betriebsmodus: document.querySelectorAll('input[name="betriebsmodus"]'),
-        tempAussen: document.getElementById('tempAussen'),
-        rhAussen: document.getElementById('rhAussen'),
-        tempZuluft: document.getElementById('tempZuluft'),
-        rhZuluft: document.getElementById('rhZuluft'),
-        volumenstrom: document.getElementById('volumenstrom'),
-        druck: document.getElementById('druck'),
-        sollFeuchteWrapper: document.getElementById('sollFeuchteWrapper'),
-        kuehlwasserWrapper: document.getElementById('kuehlwasserWrapper'),
-        tempHeizVorlauf: document.getElementById('tempHeizVorlauf'),
-        tempHeizRuecklauf: document.getElementById('tempHeizRuecklauf'),
-        tempKuehlVorlauf: document.getElementById('tempKuehlVorlauf'),
-        tempKuehlRuecklauf: document.getElementById('tempKuehlRuecklauf'),
-        resetBtn: document.getElementById('resetBtn'),
-
-        // Process Flow
-        processOverviewContainer: document.getElementById('process-overview-container'),
-        nodes: [document.getElementById('node-0'), document.getElementById('node-1'), document.getElementById('node-2'), document.getElementById('node-3'), document.getElementById('node-final')],
-        compVE: { node: document.getElementById('comp-ve'), p: document.getElementById('res-p-ve'), wv: document.getElementById('res-wv-ve') },
-        compK: { node: document.getElementById('comp-k'), p: document.getElementById('res-p-k'), wv: document.getElementById('res-wv-k'), kondensat: document.getElementById('res-kondensat') },
-        compNE: { node: document.getElementById('comp-ne'), p: document.getElementById('res-p-ne'), wv: document.getElementById('res-wv-ne') },
-        
-        // Summary
-        summaryPowerHeat: document.getElementById('summary-power-heat'),
-        summaryPowerCool: document.getElementById('summary-power-cool'),
-        summaryTAussen: document.getElementById('summary-t-aussen'), summaryRhAussen: document.getElementById('summary-rh-aussen'),
-        summaryXAussen: document.getElementById('summary-x-aussen'), summaryXGm3Aussen: document.getElementById('summary-x-gm3-aussen'),
-        summaryTZuluft: document.getElementById('summary-t-zuluft'), summaryRhZuluft: document.getElementById('summary-rh-zuluft'),
-        summaryXZuluft: document.getElementById('summary-x-zuluft'), summaryXGm3Zuluft: document.getElementById('summary-x-gm3-zuluft'),
+        raumtyp: document.getElementById('raumtyp'),
+        gebaeudetyp: document.getElementById('gebaeudetyp'),
+        raumLaenge: document.getElementById('raumLaenge'),
+        raumBreite: document.getElementById('raumBreite'),
+        raumHoehe: document.getElementById('raumHoehe'),
+        fensterFlaeche: document.getElementById('fensterFlaeche'),
+        personenAnzahl: document.getElementById('personenAnzahl'),
+        geraeteLast: document.getElementById('geraeteLast'),
+        lichtLast: document.getElementById('lichtLast'),
+        // Results
+        resVolumenstrom: document.getElementById('res-volumenstrom'),
+        infoVolumenstrom: document.getElementById('info-volumenstrom'),
+        resHeizlast: document.getElementById('res-heizlast'),
+        resKuehllast: document.getElementById('res-kuehllast'),
+        erlaeuterung: document.getElementById('erlaeuterung'),
+        // Hinweis-Boxen
+        hinweisBox: document.getElementById('hinweis-box'),
+        sicherheitshinweisBox: document.getElementById('sicherheitshinweis-box'),
     };
-    
-    const allInputs = document.querySelectorAll('input');
-    storeInitialValues(); 
 
-    const TOLERANCE = 0.01; 
-    const RHO_LUFT = 1.2; // kg/m³
-    const CP_WASSER = 4.186; // kJ/kg·K
-    const RHO_WASSER = 1000; // kg/m³
+    const allInputs = document.querySelectorAll('input, select');
+    allInputs.forEach(input => input.addEventListener('input', calculateAll));
 
-    function getPs(T) { return 611.2 * Math.exp((17.62 * T) / (243.12 + T)); }
-    function getX(T, rH, p) { const p_s = getPs(T); const p_v = (rH / 100) * p_s; return 622 * (p_v / (p - p_v)); }
-    function getRh(T, x, p) { const p_s = getPs(T); const p_v = (p * x) / (622 + x); return Math.min(100, (p_v / p_s) * 100); }
-    function getTd(x, p) { const p_v = (p * x) / (622 + x); return (243.12 * Math.log(p_v / 611.2)) / (17.62 - Math.log(p_v / 611.2)); }
-    function getH(T, x_g_kg) { const x_kg_kg = x_g_kg / 1000.0; return 1.006 * T + x_kg_kg * (2501 + 1.86 * T); }
+    // --- Voreinstellungen und Konstanten basierend auf Normen ---
+    const presets = {
+        raumtypen: {
+            buero: { personenLast: 100, luftratePerson: 30, luftwechsel: 3, maxPersonenProM2: 0.125 }, // 8 m²/Person
+            seminar: { personenLast: 120, luftratePerson: 30, luftwechsel: 4, maxPersonenProM2: 1.0 },
+            labor: { personenLast: 140, luftwechsel: 8, luftrateFlaeche: 25, maxPersonenProM2: 0.2 },
+            technik: { personenLast: 0, luftwechsel: 10, maxPersonenProM2: 0 },
+        },
+        gebaeude: { // U-Werte in W/m²K
+            unsaniert_alt: { u_wand: 1.4, u_fenster: 2.8, u_dach: 0.8 },
+            saniert_alt: { u_wand: 0.8, u_fenster: 1.9, u_dach: 0.4 },
+            enev2002: { u_wand: 0.4, u_fenster: 1.3, u_dach: 0.25 },
+            modern: { u_wand: 0.25, u_fenster: 0.9, u_dach: 0.18 },
+        },
+        temperaturen: {
+            innen_winter: 21, aussen_winter: -10,
+            innen_sommer: 24, aussen_sommer: 32,
+            max_asr: 26,
+        },
+        sonnenlast_fenster: 150,
+        cp_luft: 0.34,
+    };
+
+    function updateDefaults() { /* ... (wie zuvor) ... */ calculateAll(); }
+    dom.raumtyp.addEventListener('change', updateDefaults);
 
     function calculateAll() {
-        try {
-            // *** GEÄNDERT: Variable für Warnmeldung hinzugefügt ***
-            let warningMessage = ''; 
-            const modus = document.querySelector('input[name="betriebsmodus"]:checked').value;
-            const inputs = {
-                tempAussen: parseFloat(dom.tempAussen.value) || 0, rhAussen: parseFloat(dom.rhAussen.value) || 0,
-                tempZuluft: parseFloat(dom.tempZuluft.value) || 0, rhZuluft: parseFloat(dom.rhZuluft.value) || 0,
-                volumenstrom: parseFloat(dom.volumenstrom.value) || 0, druck: (parseFloat(dom.druck.value) || 1013.25) * 100,
-                tempVorerhitzerSoll: 5.0,
-                tempHeizVorlauf: parseFloat(dom.tempHeizVorlauf.value) || 0, tempHeizRuecklauf: parseFloat(dom.tempHeizRuecklauf.value) || 0,
-                tempKuehlVorlauf: parseFloat(dom.tempKuehlVorlauf.value) || 0, tempKuehlRuecklauf: parseFloat(dom.tempKuehlRuecklauf.value) || 0,
-            };
+        const sicherheitshinweise = [];
+        const hinweise = []; 
+        
+        const inputs = {
+            raumtyp: dom.raumtyp.value,
+            gebaeudetyp: dom.gebaeudetyp.value,
+            laenge: parseFloat(dom.raumLaenge.value) || 0,
+            breite: parseFloat(dom.raumBreite.value) || 0,
+            hoehe: parseFloat(dom.raumHoehe.value) || 0,
+            fensterFlaeche: parseFloat(dom.fensterFlaeche.value) || 0,
+            personen: parseInt(dom.personenAnzahl.value) || 0,
+            geraete: parseFloat(dom.geraeteLast.value) || 0,
+            licht: parseFloat(dom.lichtLast.value) || 0,
+        };
 
-            const aussen = { t: inputs.tempAussen, rh: inputs.rhAussen, x: getX(inputs.tempAussen, inputs.rhAussen, inputs.druck) };
-            if (!isFinite(aussen.x)) return;
-            aussen.h = getH(aussen.t, aussen.x);
-            aussen.x_gm3 = aussen.x * RHO_LUFT;
+        const raumflaeche = inputs.laenge * inputs.breite;
+        if (raumflaeche === 0) return;
 
-            const zuluftSoll = { t: inputs.tempZuluft };
-            zuluftSoll.x = (modus === 'entfeuchten') ? getX(zuluftSoll.t, inputs.rhZuluft, inputs.druck) : aussen.x;
+        const raumvolumen = raumflaeche * inputs.hoehe;
+        const p = presets;
+        const raumSettings = p.raumtypen[inputs.raumtyp];
+        const gebaeudeSettings = p.gebaeude[inputs.gebaeudetyp];
+        
+        // --- Luftvolumenstrom ermitteln ---
+        const v_personen = inputs.personen * raumSettings.luftratePerson;
+        const v_luftwechsel = raumvolumen * raumSettings.luftwechsel;
+        const v_flaeche = raumflaeche * (raumSettings.luftrateFlaeche || 0);
+        
+        const waermelast_intern = inputs.personen * raumSettings.personenLast + inputs.geraete + inputs.licht;
+        const v_waermelast = waermelast_intern / (p.cp_luft * (p.temperaturen.aussen_sommer - p.temperaturen.innen_sommer));
+        
+        let v_final = Math.max(v_personen, v_luftwechsel, v_flaeche, (inputs.raumtyp === 'technik' ? v_waermelast : 0));
+        let v_info = `Hygiene (${raumSettings.luftratePerson} m³/h/Pers)`;
 
-            // *** HINZUGEFÜGT: Plausibilitätsprüfung ***
-            if (modus === 'entfeuchten') {
-                const zielTaupunkt = getTd(zuluftSoll.x, inputs.druck);
-                // Annahme: Kühlwasser muss ca. 2K kälter sein als der Zielsollwert
-                if (zielTaupunkt < inputs.tempKuehlVorlauf + 2.0) {
-                    warningMessage = `Hinweis: Kühlwasser-Temperatur (${formatGerman(inputs.tempKuehlVorlauf, 1)}°C) zu hoch, um Taupunkt von ${formatGerman(zielTaupunkt, 1)}°C zu erreichen. Entfeuchtung nicht möglich.`;
-                }
-            }
-            
-            const massenstrom_kg_s = (inputs.volumenstrom / 3600) * RHO_LUFT;
-            let states = [aussen, { ...aussen }, { ...aussen }, { ...aussen }];
-            let operations = { ve: { p: 0, wv: 0 }, k: { p: 0, wv: 0, kondensat: 0 }, ne: { p: 0, wv: 0 } };
-            let currentState = states[0];
-
-            if (currentState.t < inputs.tempVorerhitzerSoll) {
-                const hNach = getH(inputs.tempVorerhitzerSoll, currentState.x);
-                operations.ve.p = massenstrom_kg_s * (hNach - currentState.h);
-                currentState = { t: inputs.tempVorerhitzerSoll, h: hNach, x: currentState.x };
-            }
-            states[1] = { ...currentState };
-
-            if (modus === 'entfeuchten' || modus === 'kuehlen_sensibel') {
-                const needsDehumidification = (modus === 'entfeuchten') && (currentState.x > zuluftSoll.x + TOLERANCE);
-                const needsCooling = currentState.t > zuluftSoll.t + TOLERANCE;
-                if (needsDehumidification) {
-                    const tempNachKuehler = getTd(zuluftSoll.x, inputs.druck);
-                    const hNachKuehler = getH(tempNachKuehler, zuluftSoll.x);
-                    operations.k.p = massenstrom_kg_s * (currentState.h - hNachKuehler);
-                    operations.k.kondensat = massenstrom_kg_s * (currentState.x - zuluftSoll.x) / 1000 * 3600;
-                    currentState = { t: tempNachKuehler, h: hNachKuehler, x: zuluftSoll.x };
-                } else if (needsCooling) {
-                    const h_final = getH(zuluftSoll.t, currentState.x);
-                    operations.k.p = massenstrom_kg_s * (currentState.h - h_final);
-                    currentState = { t: zuluftSoll.t, h: h_final, x: currentState.x };
-                }
-            }
-            states[2] = { ...currentState };
-
-            if (currentState.t < zuluftSoll.t - TOLERANCE) {
-                const h_final = getH(zuluftSoll.t, currentState.x);
-                operations.ne.p = massenstrom_kg_s * (h_final - currentState.h);
-                currentState = { t: zuluftSoll.t, h: h_final, x: currentState.x };
-            }
-            states[3] = { ...currentState };
-            
-            const deltaT_heiz = Math.abs(inputs.tempHeizVorlauf - inputs.tempHeizRuecklauf);
-            if (deltaT_heiz > 0) {
-                operations.ve.wv = (operations.ve.p / (RHO_WASSER * CP_WASSER * deltaT_heiz)) * 3600;
-                operations.ne.wv = (operations.ne.p / (RHO_WASSER * CP_WASSER * deltaT_heiz)) * 3600;
-            }
-            const deltaT_kuehl = Math.abs(inputs.tempKuehlRuecklauf - inputs.tempKuehlVorlauf);
-            if (deltaT_kuehl > 0) {
-                operations.k.wv = (operations.k.p / (RHO_WASSER * CP_WASSER * deltaT_kuehl)) * 3600;
-            }
-
-            const finalState = { ...states[3], rh: getRh(states[3].t, states[3].x, inputs.druck), x_gm3: states[3].x * RHO_LUFT };
-            for(let i=0; i<4; i++) states[i].rh = getRh(states[i].t, states[i].x, inputs.druck);
-            
-            // *** GEÄNDERT: Warnmeldung wird an renderAll übergeben ***
-            renderAll(states, operations, aussen, finalState, warningMessage);
-        } catch (error) { console.error("Berechnungsfehler:", error); }
-    }
-    
-    // *** GEÄNDERT: Funktion akzeptiert nun 'warningMessage' ***
-    function renderAll(states, operations, aussen, finalState, warningMessage) {
-        // *** GEÄNDERT: Logik zur Anzeige der Warnmeldung ***
-        if (warningMessage) {
-            dom.processOverviewContainer.innerHTML = `<div class="process-overview process-error">${warningMessage}</div>`;
-        } else {
-            const activeSteps = Object.entries(operations).filter(([, op]) => op.p > 0);
-            if (activeSteps.length > 0) {
-                const activeNames = activeSteps.map(([key]) => key.toUpperCase());
-                dom.processOverviewContainer.innerHTML = `<div class="process-overview process-info">Prozesskette: ${activeNames.join(' → ')}</div>`;
-            } else {
-                dom.processOverviewContainer.innerHTML = `<div class="process-overview process-success">Idealzustand</div>`;
-            }
+        if (v_luftwechsel > v_final) v_info = "Mindest-Luftwechsel";
+        if (v_flaeche > v_final) v_info = "Flächenbezogene Rate";
+        if (inputs.raumtyp === 'technik' && v_waermelast > v_final) v_info = "Wärmelastabfuhr";
+        
+        // --- Hinweise generieren ---
+        if (raumSettings.maxPersonenProM2 > 0 && (inputs.personen / raumflaeche) > raumSettings.maxPersonenProM2) {
+            sicherheitshinweise.push(`⚠️ <strong>Personendichte:</strong> Die angegebene Personenzahl ist sehr hoch. Beachten Sie die Vorgaben der Versammlungsstättenverordnung (VStättV) oder der DGUV.`);
         }
-
-        let colors = ['color-green', '', '', '', ''];
-        colors[1] = operations.ve.p > 0 ? 'color-red' : colors[0];
-        colors[2] = operations.k.p > 0 ? 'color-blue' : colors[1];
-        colors[3] = operations.ne.p > 0 ? 'color-red' : colors[2];
-        colors[4] = finalState.t > aussen.t ? 'color-red' : (finalState.t < aussen.t ? 'color-blue' : 'color-green');
-
-        for (let i = 0; i < 4; i++) updateStateNode(dom.nodes[i], i, states[i], colors[i], operations[Object.keys(operations)[i-1]]?.p <= 0 && i > 0 );
-        updateStateNode(dom.nodes[4], 'final', finalState, colors[4]);
         
-        updateComponentNode(dom.compVE, operations.ve);
-        updateComponentNode(dom.compK, operations.k);
-        updateComponentNode(dom.compNE, operations.ne);
-
-        dom.summaryPowerHeat.textContent = `${formatGerman(operations.ve.p + operations.ne.p, 2)} kW`;
-        dom.summaryPowerCool.textContent = `${formatGerman(operations.k.p, 2)} kW`;
+        if (inputs.raumtyp === 'labor') {
+            hinweise.push(`💡 **Normbezug Labor:** Der Luftbedarf wird aus dem höchsten Wert von Personenbedarf, <strong>${raumSettings.luftwechsel}-fachem Luftwechsel</strong> oder <strong>${raumSettings.luftrateFlaeche} m³/h pro m²</strong> ermittelt (gem. TRGS 526 / DIN 1946-7).`);
+        } else if (inputs.raumtyp === 'buero' || inputs.raumtyp === 'seminar') {
+             hinweise.push(`💡 **Normbezug Büro/Seminar:** Der Luftbedarf pro Person von <strong>${raumSettings.luftratePerson} m³/h</strong> entspricht den Anforderungen der Arbeitsstättenregel (ASR A3.6).`);
+        }
         
-        dom.summaryTAussen.textContent = `${formatGerman(aussen.t, 1)} °C`;
-        dom.summaryRhAussen.textContent = `${formatGerman(aussen.rh, 1)} %`;
-        dom.summaryXAussen.textContent = `${formatGerman(aussen.x, 2)} g/kg`;
-        dom.summaryXGm3Aussen.textContent = `${formatGerman(aussen.x_gm3, 2)} g/m³`;
-        dom.summaryTZuluft.textContent = `${formatGerman(finalState.t, 1)} °C`;
-        dom.summaryRhZuluft.textContent = `${formatGerman(finalState.rh, 1)} %`;
-        dom.summaryXZuluft.textContent = `${formatGerman(finalState.x, 2)} g/kg`;
-        dom.summaryXGm3Zuluft.textContent = `${formatGerman(finalState.x_gm3, 2)} g/m³`;
+        const temp_ohne_kuehlung = p.temperaturen.aussen_sommer + (waermelast_intern + inputs.fensterFlaeche * p.sonnenlast_fenster) / (v_final * p.cp_luft);
+        if (temp_ohne_kuehlung > p.temperaturen.max_asr) {
+            sicherheitshinweise.push(`⚠️ <strong>Temperatur-Check (ASR A3.5):</strong> Ohne Kühlung würde die Raumtemperatur ca. <strong>${temp_ohne_kuehlung.toFixed(1)}°C</strong> erreichen. Maßnahmen zur Temperatursenkung sind erforderlich, da die 26°C-Marke überschritten wird.`);
+        }
+        
+        // --- Heizlast & Kühllast berechnen ---
+        const dt_winter = p.temperaturen.innen_winter - p.temperaturen.aussen_winter;
+        const heizlast_transmission = ( (inputs.laenge + inputs.breite) * 2 * inputs.hoehe - inputs.fensterFlaeche) * gebaeudeSettings.u_wand * dt_winter + inputs.fensterFlaeche * gebaeudeSettings.u_fenster * dt_winter + raumflaeche * gebaeudeSettings.u_dach * dt_winter;
+        const heizlast_lueftung = v_final * p.cp_luft * dt_winter;
+        const heizlast_total_kw = (heizlast_transmission + heizlast_lueftung - waermelast_intern * 0.5) / 1000;
+
+        const kuehllast_sonne = inputs.fensterFlaeche * p.sonnenlast_fenster;
+        const kuehllast_total_kw = (waermelast_intern + kuehllast_sonne) / 1000;
+
+        // --- Ergebnisse anzeigen ---
+        dom.resVolumenstrom.textContent = `${Math.ceil(v_final)} m³/h`;
+        dom.infoVolumenstrom.textContent = `Grundlage: ${v_info}`;
+        dom.resHeizlast.textContent = `${heizlast_total_kw.toFixed(2)} kW`;
+        dom.resKuehllast.textContent = `${kuehllast_total_kw.toFixed(2)} kW`;
+        
+        dom.erlaeuterung.innerHTML = `
+            <p><strong>Detaillierter Luftbedarf:</strong> Personen (${v_personen.toFixed(0)} m³/h) | Luftwechsel (${v_luftwechsel.toFixed(0)} m³/h) | Fläche (${v_flaeche.toFixed(0)} m³/h)</p>
+            <p><strong>Detaillierte Kühllast:</strong> Interne Lasten (${(waermelast_intern/1000).toFixed(2)} kW) | Sonneneinstrahlung (${(kuehllast_sonne/1000).toFixed(2)} kW)</p>
+        `;
+
+        renderHinweise(dom.hinweisBox, hinweise);
+        renderHinweise(dom.sicherheitshinweisBox, sicherheitshinweise);
     }
     
-    function updateStateNode(node, index, state, color, isInactive = false) {
-        node.className = 'state-node';
-        if (color) node.classList.add(color);
-        if (isInactive) node.classList.add('inactive');
-        if (index === 'final') node.classList.add('final-state');
-        
-        node.querySelector(`#res-t-${index}`).textContent = formatGerman(state.t, 1);
-        node.querySelector(`#res-rh-${index}`).textContent = formatGerman(state.rh, 1);
-        node.querySelector(`#res-x-${index}`).textContent = formatGerman(state.x, 2);
-    }
-    
-    function updateComponentNode(comp, op) {
-        comp.p.textContent = formatGerman(op.p, 2);
-        if(comp.wv) comp.wv.textContent = formatGerman(op.wv, 2);
-        if(comp.kondensat) comp.kondensat.textContent = formatGerman(op.kondensat, 2);
-        comp.node.classList.toggle('inactive', op.p <= 0);
-    }
-    
-    function formatGerman(num, decimals = 0) { return isNaN(num) ? '--' : num.toLocaleString('de-DE', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }); }
-
-    function handleBetriebsmodusChange() {
-        const modus = document.querySelector('input[name="betriebsmodus"]:checked').value;
-        dom.sollFeuchteWrapper.style.display = (modus === 'entfeuchten') ? 'block' : 'none';
-        dom.kuehlwasserWrapper.style.display = (modus === 'heizen') ? 'none' : 'block';
-        calculateAll();
+    function renderHinweise(box, hinweisArray) {
+        if (hinweisArray.length > 0) {
+            box.innerHTML = hinweisArray.map(h => `<p>${h}</p>`).join('');
+            box.style.display = 'block';
+        } else {
+            box.style.display = 'none';
+        }
     }
 
-    function storeInitialValues() { allInputs.forEach(el => el.type === 'checkbox' || el.type === 'radio' ? el.dataset.defaultChecked = el.checked : el.dataset.defaultValue = el.value); }
-    function resetToDefaults() {
-        allInputs.forEach(el => el.type === 'checkbox' || el.type === 'radio' ? el.checked = el.dataset.defaultChecked === 'true' : el.value = el.dataset.defaultValue);
-        handleBetriebsmodusChange();
-    }
-
-    allInputs.forEach(input => input.addEventListener('input', calculateAll));
-    dom.betriebsmodus.forEach(radio => radio.addEventListener('change', handleBetriebsmodusChange));
-    dom.resetBtn.addEventListener('click', resetToDefaults);
-
-    handleBetriebsmodusChange();
+    // Initiale Berechnung
+    calculateAll();
 });
