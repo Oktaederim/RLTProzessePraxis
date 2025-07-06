@@ -30,11 +30,10 @@ document.addEventListener('DOMContentLoaded', () => {
         raumtypen: {
             buero: { personenLast: 100, luftratePerson: 30, luftwechsel: 3, maxPersonenProM2: 0.125 },
             seminar: { personenLast: 120, luftratePerson: 30, luftwechsel: 4, maxPersonenProM2: 1.0 },
-            // *** HIER WAR DER FEHLER - luftratePerson wurde ergänzt ***
             labor: { personenLast: 140, luftratePerson: 30, luftwechsel: 8, luftrateFlaeche: 25, maxPersonenProM2: 0.2 },
-            technik: { personenLast: 0, luftratePerson: 30, luftwechsel: 10, maxPersonenProM2: 0 },
+            technik: { personenLast: 0, luftratePerson: 30, luftwechsel: 10, maxPersonenProM2: 0 }, // luftratePerson als Fallback
         },
-        // ... der Rest des presets-Objekts bleibt gleich ...        gebaeude: { // U-Werte in W/m²K
+        gebaeude: {
             unsaniert_alt: { u_wand: 1.4, u_fenster: 2.8, u_dach: 0.8 },
             saniert_alt: { u_wand: 0.8, u_fenster: 1.9, u_dach: 0.4 },
             enev2002: { u_wand: 0.4, u_fenster: 1.3, u_dach: 0.25 },
@@ -49,7 +48,24 @@ document.addEventListener('DOMContentLoaded', () => {
         cp_luft: 0.34,
     };
 
-    function updateDefaults() { /* ... (wie zuvor) ... */ calculateAll(); }
+    function updateDefaults() {
+        const raumtyp = dom.raumtyp.value;
+        if (raumtyp === 'technik') {
+            dom.personenAnzahl.value = 0;
+            dom.geraeteLast.value = 5000;
+        } else if (raumtyp === 'labor') {
+            dom.personenAnzahl.value = 4; // Geändert auf einen realistischeren Wert
+            dom.geraeteLast.value = 1500;
+        } else if (raumtyp === 'seminar') {
+             dom.personenAnzahl.value = 15;
+            dom.geraeteLast.value = 500;
+        } else {
+            dom.personenAnzahl.value = 4;
+            dom.geraeteLast.value = 800;
+        }
+        calculateAll();
+    }
+    
     dom.raumtyp.addEventListener('change', updateDefaults);
 
     function calculateAll() {
@@ -84,12 +100,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const waermelast_intern = inputs.personen * raumSettings.personenLast + inputs.geraete + inputs.licht;
         const v_waermelast = waermelast_intern / (p.cp_luft * (p.temperaturen.aussen_sommer - p.temperaturen.innen_sommer));
         
-        let v_final = Math.max(v_personen, v_luftwechsel, v_flaeche, (inputs.raumtyp === 'technik' ? v_waermelast : 0));
-        let v_info = `Hygiene (${raumSettings.luftratePerson} m³/h/Pers)`;
-
-        if (v_luftwechsel > v_final) v_info = "Mindest-Luftwechsel";
-        if (v_flaeche > v_final) v_info = "Flächenbezogene Rate";
-        if (inputs.raumtyp === 'technik' && v_waermelast > v_final) v_info = "Wärmelastabfuhr";
+        const kandidaten = {
+            'Hygiene': v_personen,
+            'Mindest-Luftwechsel': v_luftwechsel,
+            'Flächenrate': v_flaeche,
+            'Wärmelastabfuhr': (inputs.raumtyp === 'technik' ? v_waermelast : 0)
+        };
+        
+        let v_final = 0;
+        let v_info = 'Kein Bedarf';
+        for (const [key, value] of Object.entries(kandidaten)) {
+            if (value > v_final) {
+                v_final = value;
+                v_info = key;
+            }
+        }
         
         // --- Hinweise generieren ---
         if (raumSettings.maxPersonenProM2 > 0 && (inputs.personen / raumflaeche) > raumSettings.maxPersonenProM2) {
@@ -97,12 +122,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         if (inputs.raumtyp === 'labor') {
-            hinweise.push(`💡 **Normbezug Labor:** Der Luftbedarf wird aus dem höchsten Wert von Personenbedarf, <strong>${raumSettings.luftwechsel}-fachem Luftwechsel</strong> oder <strong>${raumSettings.luftrateFlaeche} m³/h pro m²</strong> ermittelt (gem. TRGS 526 / DIN 1946-7).`);
+            hinweise.push(`💡 <strong>Normbezug Labor:</strong> Der Luftbedarf wird aus dem höchsten Wert von Personenbedarf, <strong>${raumSettings.luftwechsel}-fachem Luftwechsel</strong> oder <strong>${raumSettings.luftrateFlaeche} m³/h pro m²</strong> ermittelt (gem. TRGS 526 / DIN 1946-7).`);
         } else if (inputs.raumtyp === 'buero' || inputs.raumtyp === 'seminar') {
-             hinweise.push(`💡 **Normbezug Büro/Seminar:** Der Luftbedarf pro Person von <strong>${raumSettings.luftratePerson} m³/h</strong> entspricht den Anforderungen der Arbeitsstättenregel (ASR A3.6).`);
+             hinweise.push(`💡 <strong>Normbezug Büro/Seminar:</strong> Der Luftbedarf pro Person von <strong>${raumSettings.luftratePerson} m³/h</strong> entspricht den Anforderungen der Arbeitsstättenregel (ASR A3.6).`);
         }
         
-        const temp_ohne_kuehlung = p.temperaturen.aussen_sommer + (waermelast_intern + inputs.fensterFlaeche * p.sonnenlast_fenster) / (v_final * p.cp_luft);
+        const kuehllast_total_w = waermelast_intern + (inputs.fensterFlaeche * p.sonnenlast_fenster);
+        const temp_ohne_kuehlung = p.temperaturen.aussen_sommer + kuehllast_total_w / (v_final * p.cp_luft);
         if (temp_ohne_kuehlung > p.temperaturen.max_asr) {
             sicherheitshinweise.push(`⚠️ <strong>Temperatur-Check (ASR A3.5):</strong> Ohne Kühlung würde die Raumtemperatur ca. <strong>${temp_ohne_kuehlung.toFixed(1)}°C</strong> erreichen. Maßnahmen zur Temperatursenkung sind erforderlich, da die 26°C-Marke überschritten wird.`);
         }
@@ -113,18 +139,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const heizlast_lueftung = v_final * p.cp_luft * dt_winter;
         const heizlast_total_kw = (heizlast_transmission + heizlast_lueftung - waermelast_intern * 0.5) / 1000;
 
-        const kuehllast_sonne = inputs.fensterFlaeche * p.sonnenlast_fenster;
-        const kuehllast_total_kw = (waermelast_intern + kuehllast_sonne) / 1000;
-
         // --- Ergebnisse anzeigen ---
         dom.resVolumenstrom.textContent = `${Math.ceil(v_final)} m³/h`;
         dom.infoVolumenstrom.textContent = `Grundlage: ${v_info}`;
         dom.resHeizlast.textContent = `${heizlast_total_kw.toFixed(2)} kW`;
-        dom.resKuehllast.textContent = `${kuehllast_total_kw.toFixed(2)} kW`;
+        dom.resKuehllast.textContent = `${(kuehllast_total_w / 1000).toFixed(2)} kW`;
         
         dom.erlaeuterung.innerHTML = `
             <p><strong>Detaillierter Luftbedarf:</strong> Personen (${v_personen.toFixed(0)} m³/h) | Luftwechsel (${v_luftwechsel.toFixed(0)} m³/h) | Fläche (${v_flaeche.toFixed(0)} m³/h)</p>
-            <p><strong>Detaillierte Kühllast:</strong> Interne Lasten (${(waermelast_intern/1000).toFixed(2)} kW) | Sonneneinstrahlung (${(kuehllast_sonne/1000).toFixed(2)} kW)</p>
+            <p><strong>Detaillierte Kühllast:</strong> Interne Lasten (${(waermelast_intern/1000).toFixed(2)} kW) | Sonneneinstrahlung (${(inputs.fensterFlaeche * p.sonnenlast_fenster/1000).toFixed(2)} kW)</p>
         `;
 
         renderHinweise(dom.hinweisBox, hinweise);
@@ -141,5 +164,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Initiale Berechnung
-    calculateAll();
+    updateDefaults();
 });
