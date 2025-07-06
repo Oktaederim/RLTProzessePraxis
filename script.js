@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Voreinstellungen und Konstanten basierend auf Normen ---
     const presets = {
         raumtypen: {
-            buero: { personenLast: 100, luftratePerson: 30, luftwechsel: 3, maxPersonenProM2: 0.125 }, // 8 m²/Person
+            buero: { personenLast: 100, luftratePerson: 30, luftwechsel: 3, maxPersonenProM2: 0.125 },
             seminar: { personenLast: 120, luftratePerson: 30, luftwechsel: 4, maxPersonenProM2: 1.0 },
             hoersaal: { personenLast: 120, luftratePerson: 30, luftwechsel: 5, maxPersonenProM2: 1.5 },
             labor: { personenLast: 140, luftratePerson: 30, luftwechsel: 8, luftrateFlaeche: 25, maxPersonenProM2: 0.2 },
@@ -106,6 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const waermelast_intern = inputs.personen * raumSettings.personenLast + inputs.geraete + inputs.licht;
         const v_waermelast = waermelast_intern / (p.cp_luft * (p.temperaturen.aussen_sommer - p.temperaturen.innen_sommer));
         
+        // *** GEÄNDERT: Logik zur Bestimmung des maßgeblichen Luftbedarfs ***
         const kandidaten = {
             'Hygiene': v_personen,
             'Mindest-Luftwechsel': v_luftwechsel,
@@ -122,11 +123,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        // *** GEÄNDERT: Detaillierter Hinweis zur Personendichte ***
+        // --- GEÄNDERT: Logik zur Generierung der Hinweise ---
         const personen_pro_m2 = inputs.personen / raumflaeche;
         if (raumSettings.maxPersonenProM2 > 0 && personen_pro_m2 > raumSettings.maxPersonenProM2) {
             const empfohlene_pers = Math.floor(raumflaeche * raumSettings.maxPersonenProM2);
-            sicherheitshinweise.push(`⚠️ <strong>Personendichte:</strong> Die Dichte von <strong>${personen_pro_m2.toFixed(1)} Pers./m²</strong> ist sehr hoch. Empfohlen sind ca. <strong>${raumSettings.maxPersonenProM2.toFixed(1)} Pers./m²</strong> (max. ${empfohlene_pers} Personen für diesen Raum).`);
+            sicherheitshinweise.push(`⚠️ <strong>Personendichte:</strong> ${personen_pro_m2.toFixed(1)} Pers./m² ist sehr hoch. Empfohlen sind ca. ${raumSettings.maxPersonenProM2.toFixed(1)} Pers./m² (max. ${empfohlene_pers} Personen für diesen Raum).`);
         }
         
         if (inputs.raumtyp === 'labor') {
