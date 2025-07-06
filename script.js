@@ -28,12 +28,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Voreinstellungen und Konstanten basierend auf Normen ---
     const presets = {
         raumtypen: {
-            buero: { personenLast: 100, luftratePerson: 30, luftwechsel: 3, maxPersonenProM2: 0.125 }, // 8 m²/Person
+            buero: { personenLast: 100, luftratePerson: 30, luftwechsel: 3, maxPersonenProM2: 0.125 },
             seminar: { personenLast: 120, luftratePerson: 30, luftwechsel: 4, maxPersonenProM2: 1.0 },
-            labor: { personenLast: 140, luftwechsel: 8, luftrateFlaeche: 25, maxPersonenProM2: 0.2 },
-            technik: { personenLast: 0, luftwechsel: 10, maxPersonenProM2: 0 },
+            // *** HIER WAR DER FEHLER - luftratePerson wurde ergänzt ***
+            labor: { personenLast: 140, luftratePerson: 30, luftwechsel: 8, luftrateFlaeche: 25, maxPersonenProM2: 0.2 },
+            technik: { personenLast: 0, luftratePerson: 30, luftwechsel: 10, maxPersonenProM2: 0 },
         },
-        gebaeude: { // U-Werte in W/m²K
+        // ... der Rest des presets-Objekts bleibt gleich ...        gebaeude: { // U-Werte in W/m²K
             unsaniert_alt: { u_wand: 1.4, u_fenster: 2.8, u_dach: 0.8 },
             saniert_alt: { u_wand: 0.8, u_fenster: 1.9, u_dach: 0.4 },
             enev2002: { u_wand: 0.4, u_fenster: 1.3, u_dach: 0.25 },
