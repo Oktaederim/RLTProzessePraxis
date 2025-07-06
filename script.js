@@ -28,11 +28,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Voreinstellungen und Konstanten basierend auf Normen ---
     const presets = {
         raumtypen: {
-            buero: { personenLast: 100, luftratePerson: 30, luftwechsel: 3, maxPersonenProM2: 0.125 },
+            buero: { personenLast: 100, luftratePerson: 30, luftwechsel: 3, maxPersonenProM2: 0.125 }, // 8 m²/Person
             seminar: { personenLast: 120, luftratePerson: 30, luftwechsel: 4, maxPersonenProM2: 1.0 },
             hoersaal: { personenLast: 120, luftratePerson: 30, luftwechsel: 5, maxPersonenProM2: 1.5 },
             labor: { personenLast: 140, luftratePerson: 30, luftwechsel: 8, luftrateFlaeche: 25, maxPersonenProM2: 0.2 },
-            technik: { personenLast: 0, luftratePerson: 30, luftwechsel: 10, maxPersonenProM2: 0 }, 
+            technik: { personenLast: 0, luftratePerson: 30, luftwechsel: 10, maxPersonenProM2: 0 },
         },
         gebaeude: {
             unsaniert_alt: { u_wand: 1.4, u_fenster: 2.8, u_dach: 0.8 },
@@ -106,18 +106,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const waermelast_intern = inputs.personen * raumSettings.personenLast + inputs.geraete + inputs.licht;
         const v_waermelast = waermelast_intern / (p.cp_luft * (p.temperaturen.aussen_sommer - p.temperaturen.innen_sommer));
         
-        // *** GEÄNDERT: Logik zur Bestimmung des maßgeblichen Luftbedarfs ***
         const kandidaten = {
             'Hygiene': v_personen,
             'Mindest-Luftwechsel': v_luftwechsel,
             'Flächenrate': v_flaeche,
-            'Wärmelastabfuhr': (inputs.raumtyp === 'technik' ? v_waermelast : 0)
+            'Wärmelastabfuhr': (inputs.raumtyp === 'technik' || inputs.raumtyp === 'hoersaal' ? v_waermelast : 0)
         };
-        
-        // Für den Hörsaal wird v_waermelast auch berücksichtigt
-        if (inputs.raumtyp === 'hoersaal') {
-            kandidaten['Wärmelastabfuhr'] = v_waermelast;
-        }
         
         let v_final = 0;
         let v_info = 'Kein Bedarf';
@@ -128,11 +122,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        // --- GEÄNDERT: Logik zur Generierung der Hinweise ---
+        // *** GEÄNDERT: Detaillierter Hinweis zur Personendichte ***
         const personen_pro_m2 = inputs.personen / raumflaeche;
         if (raumSettings.maxPersonenProM2 > 0 && personen_pro_m2 > raumSettings.maxPersonenProM2) {
             const empfohlene_pers = Math.floor(raumflaeche * raumSettings.maxPersonenProM2);
-            sicherheitshinweise.push(`⚠️ <strong>Personendichte:</strong> ${personen_pro_m2.toFixed(1)} Pers./m² ist sehr hoch. Für diesen Raumtyp werden ca. ${raumSettings.maxPersonenProM2.toFixed(1)} Pers./m² (max. ${empfohlene_pers} Pers.) empfohlen (vgl. DGUV/VStättV).`);
+            sicherheitshinweise.push(`⚠️ <strong>Personendichte:</strong> Die Dichte von <strong>${personen_pro_m2.toFixed(1)} Pers./m²</strong> ist sehr hoch. Empfohlen sind ca. <strong>${raumSettings.maxPersonenProM2.toFixed(1)} Pers./m²</strong> (max. ${empfohlene_pers} Personen für diesen Raum).`);
         }
         
         if (inputs.raumtyp === 'labor') {
